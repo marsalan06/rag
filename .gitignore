@@ -4,3 +4,7 @@ venv/
 vector_store/
 chroma_db/
 data/
+groq_rag/venv/
+groq_rag/chroma_db_llamaparse/
+groq_rag/__pycache__/
+groq_rag/.env
