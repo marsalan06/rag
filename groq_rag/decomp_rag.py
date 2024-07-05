@@ -90,7 +90,7 @@ class DecompositionRAG:
 
             rag_chain = (
                 decomposition_prompt
-                | ChatOpenAI(temperature=0.5)
+                | ChatOpenAI(temperature=0.0)
                 | StrOutputParser()
             )
             answer = rag_chain.invoke(prompt_input)
@@ -104,14 +104,12 @@ class DecompositionRAG:
     def format_qa_pair(question, answer):
         return f"Question: {question}\n\nAnswer: {answer}\n\n"
 
-    def generate_response(self, question, q_a_pairs, context_template):
-        context = context_template.format(context=q_a_pairs, question=question)
-        prompt = ChatPromptTemplate.from_template(context_template)
+    def generate_response(self, question, q_a_pairs, final_prompt_template):
+        prompt = ChatPromptTemplate.from_template(final_prompt_template)
         llm = ChatOpenAI(temperature=0)
         final_rag_chain = (
-            {"context": context, "question": question}
-            | prompt
+            prompt
             | llm
             | StrOutputParser()
         )
-        return final_rag_chain.invoke({"question": question})
+        return final_rag_chain.invoke({"context": q_a_pairs, "question": question})
