@@ -1,4 +1,5 @@
 import os
+import logging
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_openai import OpenAIEmbeddings
@@ -6,8 +7,9 @@ from langchain_community.vectorstores import Chroma
 from langchain.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_openai import ChatOpenAI
-from langchain.load import dumps, loads
-from operator import itemgetter
+
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class DecompositionRAG:
@@ -24,41 +26,47 @@ class DecompositionRAG:
         persist_directory = "chroma_db_llamaparse"
 
         if load:
-            print("---load---")
+            logging.info("Loading existing vector database.")
             try:
                 vs = Chroma(persist_directory=persist_directory,
                             embedding_function=self.embed_model)
-                print("Vector DB loaded successfully!")
-                print("----loaded----")
+                logging.info("Vector DB loaded successfully!")
                 return vs
             except FileNotFoundError:
-                print("No existing vector DB found, building a new one.")
+                logging.warning(
+                    "No existing vector DB found, building a new one.")
 
-        # Load PDF documents from the "data" directory
-        documents = []
-        for file_name in os.listdir("data"):
-            if file_name.endswith(".pdf"):
-                print("=====file name----", file_name)
-                pdf_loader = PyPDFLoader(os.path.join("data", file_name))
-                documents.extend(pdf_loader.load())
-            print("----documents----", documents)
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=700, chunk_overlap=100)
-        docs = text_splitter.split_documents(documents)
-        print("----docs----", docs)
+        logging.info("Loading PDF documents from the 'data' directory.")
+        documents = self._load_documents_from_directory("data")
+        docs = self._split_documents(documents)
 
-        # Create and persist a new Chroma vector database from the chunked documents
         vs = Chroma.from_documents(
             docs, self.embed_model, persist_directory=persist_directory)
         vs.persist()
-        print("00000vs-0---", vs)
-        print('Vector DB created and persisted successfully!')
+        logging.info("Vector DB created and persisted successfully!")
         return vs
 
-    def create_prompt_template(self, template):
+    @staticmethod
+    def _load_documents_from_directory(directory):
+        documents = []
+        for file_name in os.listdir(directory):
+            if file_name.endswith(".pdf"):
+                logging.info(f"Loading file: {file_name}")
+                pdf_loader = PyPDFLoader(os.path.join(directory, file_name))
+                documents.extend(pdf_loader.load())
+        return documents
+
+    @staticmethod
+    def _split_documents(documents):
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=700, chunk_overlap=100)
+        return text_splitter.split_documents(documents)
+
+    @staticmethod
+    def create_prompt_template(template):
         return ChatPromptTemplate.from_template(template)
 
-    def generate_queries(self, prompt_template):
+    def generate_queries_chain(self, prompt_template):
         return (
             prompt_template
             | ChatOpenAI(temperature=0.0)
@@ -66,27 +74,22 @@ class DecompositionRAG:
             | (lambda x: x.split("\n\n"))
         )
 
-    def generate_subquestions(self, question, generate_queries_decomposition):
-        return generate_queries_decomposition.invoke({"question": question})
+    def generate_subquestions(self, question, generate_queries_chain):
+        return generate_queries_chain.invoke({"question": question})
 
     def retrieve_and_format_qa_pairs(self, questions, retriever, decomposition_prompt):
         q_a_pairs = ""
         for q in questions:
-            print("-----q-----", q)
-            # Retrieve documents for the sub-question
+            logging.info(f"Retrieving documents for sub-question: {q}")
             docs = retriever.similarity_search(q)
-            # try this
-            #  retriever.as_retriever(search_type=search_type, search_kwargs={"k": 3})
-            print("---docs----", docs)
             context = [doc.page_content for doc in docs]
-            print("----context----", context)
-            # Format the context for the decomposition prompt
+            logging.debug(f"Context for {q}: {context}")
+
             prompt_input = {
                 "context": "\n".join(context),
                 "question": q,
                 "q_a_pairs": q_a_pairs
             }
-            print("-----prompt_input----", prompt_input)
 
             rag_chain = (
                 decomposition_prompt
@@ -95,9 +98,7 @@ class DecompositionRAG:
             )
             answer = rag_chain.invoke(prompt_input)
             q_a_pair = self.format_qa_pair(q, answer)
-            print("-----q/a pairs text---", q_a_pairs)
             q_a_pairs = q_a_pairs + "\n\n---\n\n" + q_a_pair
-
         return q_a_pairs
 
     @staticmethod
@@ -105,10 +106,9 @@ class DecompositionRAG:
         return f"Question: {question}\n\nAnswer: {answer}\n\n"
 
     def generate_response(self, question, q_a_pairs, final_prompt_template):
-        prompt = ChatPromptTemplate.from_template(final_prompt_template)
         llm = ChatOpenAI(temperature=0)
         final_rag_chain = (
-            prompt
+            final_prompt_template
             | llm
             | StrOutputParser()
         )
