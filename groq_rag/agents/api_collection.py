@@ -59,3 +59,45 @@ def fetch_finance_logo(stock: str) -> FinanceLogoResponse:
     data = {"stock": stock}
     response = requests.post(url, headers=headers, json=data)
     return FinanceLogoResponse(**response.json())
+
+
+class SaleOrder(BaseModel):
+    id: int
+    name: str
+    state: str
+    date_order: str
+    amount_total: float
+    # Add other relevant fields here
+
+
+class SaleOrderData(BaseModel):
+    current: int
+    total_pages: int
+    length_record: int
+    record: List[SaleOrder]
+
+
+class SaleOrderResponse(BaseModel):
+    status_code: int
+    message: str
+    data: SaleOrderData
+
+
+class SaleOrderAPIResponse(BaseModel):
+    jsonrpc: str
+    id: Optional[int]
+    result: SaleOrderResponse
+    success: Optional[bool] = None
+
+
+@tool
+def fetch_sale_orders() -> SaleOrderAPIResponse:
+    """Fetches sale orders using the provided API endpoint."""
+    url = "http://0.0.0.0:8069/api/model/sale.order"
+    headers = {
+        "Content-Type": "application/json",
+        "Cookie": "session_id="
+    }
+    data = {"": ""}
+    response = requests.get(url, headers=headers, json=data)
+    return SaleOrderAPIResponse(**response.json())

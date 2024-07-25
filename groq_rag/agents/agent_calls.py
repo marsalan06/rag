@@ -1,7 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_openai import ChatOpenAI
-from api_collection import fetch_weather, fetch_finance_logo
+from api_collection import fetch_weather, fetch_finance_logo, fetch_sale_orders
 import re
 import os
 
@@ -18,7 +18,7 @@ prompt = ChatPromptTemplate.from_messages([
 ])
 
 # Define the tools
-tools = [fetch_weather, fetch_finance_logo]
+tools = [fetch_weather, fetch_finance_logo, fetch_sale_orders]
 
 # Define the language model
 llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0)
@@ -44,7 +44,7 @@ agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 # Define the input message
 # input_message = "What is the current weather in Karachi, give me result in centrigrade? Also, get me the logo for AMZN."
-input_message = "Hey how are you ?"
+input_message = "What are my sales?"
 # Parse the query to extract parameters
 # city, stock = parse_query(input_message)
 
