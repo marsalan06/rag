@@ -1,7 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_openai import ChatOpenAI
-from api_collection import fetch_weather, fetch_finance_logo, fetch_sale_orders
+from api_collection import fetch_weather, fetch_finance_logo, login_to_odoo, fetch_sale_orders, check_session_status
 import re
 import os
 
@@ -12,13 +12,18 @@ os.environ['LANGCHAIN_API_KEY'] = ''
 
 # Define the chat prompt template
 prompt = ChatPromptTemplate.from_messages([
-    ("system", "You're a helpful assistant"),
+    ("system", "You are a helpful assistant. You have access to multiple APIs, including Odoo APIs and others. "
+               "When interacting with Odoo APIs, you must manage a session ID. "
+               "If the session ID and is available and not expired dont call the login api everytime, use it to call the Odoo sales API or any other Odoo-specific API. "
+               "If the session has expired or is not available, first call the login API to obtain a new session ID, "
+               "and then proceed with the Odoo API request. For non-Odoo APIs, you do not need to handle the session ID."),
     ("human", "{input}"),
     ("placeholder", "{agent_scratchpad}")
 ])
 
 # Define the tools
-tools = [fetch_weather, fetch_finance_logo, fetch_sale_orders]
+tools = [check_session_status, fetch_weather,
+         fetch_finance_logo, login_to_odoo, fetch_sale_orders]
 
 # Define the language model
 llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0)
@@ -44,7 +49,8 @@ agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
 
 # Define the input message
 # input_message = "What is the current weather in Karachi, give me result in centrigrade? Also, get me the logo for AMZN."
-input_message = "What are my sales?"
+input_message = "What is the weather in karachi and my sales?"
+
 # Parse the query to extract parameters
 # city, stock = parse_query(input_message)
 
