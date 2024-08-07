@@ -3,8 +3,9 @@ from dataclasses import dataclass
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.agents import create_tool_calling_agent, AgentExecutor
 from langchain_openai import ChatOpenAI
-from api_collection import fetch_weather, fetch_finance_logo, login_to_odoo, fetch_sale_orders, check_session_status, WeatherResponse, SaleOrderAPIResponse, FinanceLogoResponse, ErrorResponse
+from api_collection import fetch_finance_logo, login_to_odoo, fetch_sale_orders, fetch_sale_orders_by_user_id, check_session_status, fetch_user_id_by_login, SaleOrderAPIResponse, FinanceLogoResponse, ErrorResponse, UserAPIResponse
 from pydantic import BaseModel, Field
+from weather_api import fetch_current_weather, WeatherAPIResponse
 from typing import Optional, List, Dict
 import os
 
@@ -52,14 +53,17 @@ def get_agent_executor() -> AgentExecutor:
                    "When interacting with Odoo APIs, you must manage a session ID. "
                    "If the session ID is available and not expired, don't call the login API every time; use it to call the Odoo sales API or any other Odoo-specific API. "
                    "If the session has expired or is not available, first call the login API to obtain a new session ID, "
-                   "and then proceed with the Odoo API request. For non-Odoo APIs, you do not need to handle the session ID."),
+                   "and then proceed with the Odoo API request. For non-Odoo APIs, you do not need to handle the session ID."
+                   "When a user wants sale orders, determine the wether they provide a user id or not from their query. "
+                   "If their is a user_id pass it to the 'fetch_sale_orders_by_user_id' tool."
+                   "If user has provided their login id/name use the 'fetch_user_id_by_login' to get the user_id and then use 'fetch_sale_orders_by_user_id' "),
         ("human", "{input}"),
         ("placeholder", "{agent_scratchpad}")
     ])
 
     # Define the tools that the agent can use (e.g., API calls)
-    tools = [check_session_status, fetch_weather,
-             fetch_finance_logo, login_to_odoo, fetch_sale_orders]
+    tools = [check_session_status, fetch_current_weather,
+             fetch_finance_logo, login_to_odoo, fetch_sale_orders, fetch_sale_orders_by_user_id, fetch_user_id_by_login]
 
     # Define the language model used by the agent
     llm = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0)
@@ -75,8 +79,11 @@ def get_agent_executor() -> AgentExecutor:
 
 
 def extract_text_from_response(response) -> str:
-    if isinstance(response, WeatherResponse):
-        return f"Weather in {response.name}: {response.weather[0]['description']}, Temperature: {response.main['temp']}°C"
+    if isinstance(response, WeatherAPIResponse):
+        location = response.location.name
+        description = response.current.condition.text
+        temperature = response.current.temp_c
+        return f"Weather in {location}: {description}, Temperature: {temperature}°C"
     elif isinstance(response, SaleOrderAPIResponse):
         if response.success:
             orders = response.result.data.record
@@ -85,6 +92,12 @@ def extract_text_from_response(response) -> str:
             return f"Error: {response.result.message}"
     elif isinstance(response, FinanceLogoResponse):
         return f"Logo URL: {response.logo}" if response.logo else "No logo found for the specified stock."
+    elif isinstance(response, UserAPIResponse):
+        if response.success:
+            users = response.result.data.record
+            return f"Found {len(users)} users: " + ", ".join([user.name for user in users])
+        else:
+            return f"Error: {response.result.message}"
     elif isinstance(response, ErrorResponse):
         return f"Error: {response.error.message} (Code: {response.error.code})"
     else:

@@ -1,9 +1,12 @@
 from langchain_core.tools import tool
+from jsonrpcclient import request, parse, Ok
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 import requests
 from langchain.memory.simple import SimpleMemory
 import redis
+from pydantic import ValidationError
+
 
 redis_client = redis.StrictRedis(
     host='172.17.0.2', port=6379, db=0, decode_responses=True)
@@ -13,8 +16,8 @@ redis_client.set("session_expired", int(False))  # Store as 0
 # Initialize memory to store session_id
 memory = SimpleMemory(memories={
     # Initially, set to True to ensure login is called first
-    "db": "",
-    "username": ".@.com",
+    "db": "postgres",
+    "username": "",
     "password": ""
 })
 # Define Pydantic models for Weather API
@@ -55,7 +58,7 @@ def check_session_status() -> bool:
     """Checks if the session ID is present and not expired in Redis."""
     session_id = redis_client.get("session_id")
     # Redis stores everything as strings
-    session_expired = bool(int(redis_client.get("session_expired"))) == "True"
+    session_expired = bool((redis_client.get("session_expired"))) == "True"
 
     if session_id and not session_expired:
         return True
@@ -108,6 +111,9 @@ class SaleOrder(BaseModel):
     state: str
     date_order: str
     amount_total: float
+    company_id: Tuple[int, str]
+    user_id: Tuple[int, str]
+
     # Add other relevant fields here
 
 
@@ -195,3 +201,108 @@ def fetch_sale_orders(session_id: str) -> SaleOrderAPIResponse:
     redis_client.set("session_expired", int(False))
     # If successful, return the sale order data
     return SaleOrderAPIResponse(**response_data)
+
+
+@tool
+def fetch_sale_orders_by_user_id(session_id: str, user_id: int = None) -> SaleOrderAPIResponse:
+    """Fetches sale orders using the provided API endpoint, with the filter by user_id."""
+
+    session_id = redis_client.get("session_id")
+    if not session_id:
+        return ErrorResponse(jsonrpc="2.0", id=None, error=ErrorData(code=100, message="No session_id available. Please log in first."))
+
+    # Prepare the base URL
+    url = "http://0.0.0.0:8069/api/model/sale.order"
+
+    # Add user_id filter if provided
+    if user_id is not None:
+        url += f"/?filter=[('user_id', '=', {user_id})]"
+
+    headers = {
+        "Content-Type": "application/json",
+        "Cookie": f"session_id={session_id}"
+    }
+    data = {}
+    print("----reque-----", url, headers, data)
+    response = requests.get(url, headers=headers, json=data)
+    print("----resp----", response.__dict__)
+    response_data = response.json()
+
+    # If there's an error in the response, return it
+    if 'error' in response_data:
+        redis_client.set("session_expired", int(True)
+                         )  # Mark session as expired
+        return ErrorResponse(**response_data)
+
+    redis_client.set("session_expired", int(False))
+    # If successful, return the sale order data
+    return SaleOrderAPIResponse(**response_data)
+
+
+class User(BaseModel):
+    id: int
+    name: str
+    user_ids: List[int]
+
+
+class UserData(BaseModel):
+    current: int
+    total_pages: int
+    length_record: int
+    record: List[User]
+
+
+class UserResponse(BaseModel):
+    status_code: int
+    message: str
+    data: UserData
+
+
+class UserAPIResponse(BaseModel):
+    jsonrpc: str
+    id: Optional[int]
+    result: Optional[UserResponse]
+    success: Optional[bool] = None
+
+
+class ErrorData(BaseModel):
+    code: int
+    message: str
+
+
+class ErrorResponse(BaseModel):
+    jsonrpc: str
+    id: Optional[int]
+    error: ErrorData
+
+
+@tool
+def fetch_user_id_by_login(session_id: str, login: str) -> UserAPIResponse:
+    """Fetches user ID and name using the provided API endpoint, filtered by login field."""
+
+    session_id = redis_client.get("session_id")
+    if not session_id:
+        return ErrorResponse(jsonrpc="2.0", id=None, error=ErrorData(code=100, message="No session_id available. Please log in first."))
+
+    # Prepare the URL with the login filter
+    url = f"http://0.0.0.0:8069/api/model/res.users/?fields=name%2Cuser_ids&filter=[('login', '=', '{login}')]"
+
+    headers = {
+        "Content-Type": "application/json",
+        "Cookie": f"session_id={session_id}"
+    }
+    data = {}
+    print("----reque-----", url, headers, data)
+    response = requests.get(url, headers=headers, json=data)
+    print("----resp----", response.__dict__)
+    response_data = response.json()
+
+    # If there's an error in the response, return it
+    if 'error' in response_data:
+        redis_client.set("session_expired", int(True)
+                         )  # Mark session as expired
+        return ErrorResponse(**response_data)
+
+    redis_client.set("session_expired", int(False))
+    # If successful, return the user data
+    return UserAPIResponse(**response_data)
