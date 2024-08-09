@@ -54,16 +54,51 @@ class WeatherResponse(BaseModel):
 
 
 @tool
-def check_session_status() -> bool:
-    """Checks if the session ID is present and not expired in Redis."""
-    session_id = redis_client.get("session_id")
-    # Redis stores everything as strings
-    session_expired = bool((redis_client.get("session_expired"))) == "True"
+def check_session_status() -> dict:
+    """Checks if the session has expired by looking up the user in Redis.
+    If no username is found in memory, returns a message prompting for username and password."""
 
-    if session_id and not session_expired:
-        return True
+    # Retrieve the username from memory
+    username = memory.memories.get("username")
+
+    if not username:
+        return {
+            "status": False,
+            "message": "Username not found in memory. Please provide your username and password."
+        }
+
+    # Retrieve user info from Redis
+    user_info = redis_client.hgetall(f"user_session_{username}")
+
+    # Check if session exists and is not expired
+    session_active = user_info.get(
+        "session_expired") == "0"  # 0 means not expired
+    user_id = user_info.get("user_id")
+
+    if user_id and session_active:
+        return {
+            "status": True,
+            "message": "Session is active."
+        }
     else:
-        return False
+        return {
+            "status": False,
+            "message": "Session has expired. Please log in again."
+        }
+
+
+@tool
+def store_user_credentials(username: str, password: str) -> dict:
+    """Stores the provided username and password in memory."""
+
+    # Store the username and password in memory
+    memory.memories["username"] = username
+    memory.memories["password"] = password
+
+    return {
+        "status": True,
+        "message": "Username and password have been stored in memory."
+    }
 
 
 @tool
@@ -108,11 +143,11 @@ def fetch_finance_logo(stock: str) -> FinanceLogoResponse:
 class SaleOrder(BaseModel):
     id: int
     name: str
-    state: str
-    date_order: str
+    state: Optional[str] = Field(None)
+    date_order: Optional[str] = Field(None)
     amount_total: float
-    company_id: Tuple[int, str]
-    user_id: Tuple[int, str]
+    company_id: Optional[Tuple[int, str]] = Field(None)
+    user_id: Optional[Tuple[int, str]] = Field(None)
 
     # Add other relevant fields here
 
