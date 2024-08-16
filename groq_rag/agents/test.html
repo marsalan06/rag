@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Widget</title>
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f0f0f0; /* Light background for the whole page */
+        }
+
+        #chat-widget {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        #chat-icon {
+            background: url('file:///home/arsalan/chat-icon.png') no-repeat center center;
+            background-size: cover;
+            border: none;
+            cursor: pointer;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%; /* Makes the icon rounded */
+        }
+
+        #chat-window {
+            width: 400px; /* Increased width */
+            height: 600px; /* Increased height */
+            position: fixed;
+            bottom: 20px; /* Adjusted for larger size */
+            right: 20px;
+            border: 1px solid #ccc;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3); /* Lighter shadow */
+            background: white;
+            display: none;
+            flex-direction: column;
+            border-radius: 10px; /* Rounded corners for the chat window */
+            resize: both; /* Makes the window resizable */
+            overflow: hidden; /* Required for resize */
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%; /* Adjusted to fill the container */
+            border: none;
+            font-size: 0.8em; /* Smaller text size */
+        }
+
+        #close-btn {
+            position: absolute; /* Positioned absolutely within the resizable window */
+            top: 0;
+            right: 10;
+            padding: 5px 10px;
+            cursor: pointer;
+            background: #f44336;
+            color: white;
+            border: none;
+            border-radius: 0 10px 0 0; /* Rounded top right corner */
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-widget">
+        <button id="chat-icon"></button>
+        <div id="chat-window" class="hidden">
+            <iframe src="http://0.0.0.0:8501" frameborder="0"></iframe>
+            <button id="close-btn">Close</button>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('chat-icon').onclick = function() {
+            document.getElementById('chat-window').style.display = 'flex';
+        };
+
+        document.getElementById('close-btn').onclick = function() {
+            document.getElementById('chat-window').style.display = 'none';
+        };
+    </script>
+</body>
+</html>
+
